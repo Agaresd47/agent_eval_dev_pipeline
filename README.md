@@ -1,6 +1,5 @@
-# agent_dev
+# Python 脏脚本规范化重构
 
-`Task Forge v2` 的对外版原型,面向 Agent Dev / Agent Eval 岗位面试。
 
 给它一份 Python 源代码,它把脚本里糊在一起的多个职责拆成多个可独立验证的小任务,输出结构化的方案 JSON。终稿是否通过由规则函数裁定,LLM 不参与判定。
 
