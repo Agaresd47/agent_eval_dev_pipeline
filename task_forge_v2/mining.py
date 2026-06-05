@@ -11,11 +11,10 @@ from .config import get_project_paths, get_repo_root
 from .schemas import SourceSummary
 
 PATH_LITERAL_RE = re.compile(r"(/data/[^\"'\s]+|[A-Za-z]:\\[^\"'\s]+)")
-DIRTY_ROOT = get_project_paths().source_root
 
 
 def iter_source_python_files(source_root: Path | None = None) -> Iterable[Path]:
-    root = (source_root or DIRTY_ROOT).resolve()
+    root = (source_root or get_project_paths().source_root).resolve()
     if not root.exists():
         return
     yield from sorted(root.rglob("*.py"))

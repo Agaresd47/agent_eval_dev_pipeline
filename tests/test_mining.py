@@ -13,11 +13,11 @@ def test_iter_dirty_python_files_returns_sorted_python_files(tmp_path, monkeypat
     (dirty_root / "b" / "two.py").write_text("print('b')", encoding="utf-8")
     (dirty_root / "b" / "ignore.txt").write_text("skip", encoding="utf-8")
 
-    monkeypatch.setattr(mining, "DIRTY_ROOT", dirty_root)
+    monkeypatch.setenv("TASK_FORGE_SOURCE_ROOT", str(dirty_root))
 
     assert list(mining.iter_dirty_python_files()) == [
-        dirty_root / "a" / "one.py",
-        dirty_root / "b" / "two.py",
+        (dirty_root / "a" / "one.py").resolve(),
+        (dirty_root / "b" / "two.py").resolve(),
     ]
 
 

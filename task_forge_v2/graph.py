@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import operator
 import warnings
 from datetime import datetime
@@ -13,6 +14,8 @@ warnings.filterwarnings("ignore", message="The default value of `allowed_objects
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+
+logger = logging.getLogger(__name__)
 
 from .assessment import assess_task
 from .config import get_project_paths
@@ -34,6 +37,30 @@ from .retrieval import build_retrieval_query, retrieve_context_pack
 from .schemas import AnchorAssessment, ConsensusReview, CriticReview, CuratedTask, DraftTask, RetrievalHit, RunArtifact, SourceSummary, SourceTriage
 from .triage_rules import normalize_source_triage
 from .validators import validate_curated_task, validate_draft_task
+
+_SHARED_CLIENT: MimoStructuredClient | None = None
+CRITIC_SOURCE_CHAR_LIMIT = 9000
+
+
+def _get_client() -> MimoStructuredClient:
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT is None:
+        _SHARED_CLIENT = MimoStructuredClient()
+    return _SHARED_CLIENT
+
+
+def _read_source_excerpt(source_path: str) -> str:
+    """Read the source file the critic is reviewing, truncated to keep prompt size bounded."""
+    try:
+        text = Path(source_path).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        logger.warning("critic_source_read_failed path=%s error=%s", source_path, exc)
+        return ""
+    if len(text) <= CRITIC_SOURCE_CHAR_LIMIT:
+        return text
+    head = text[: CRITIC_SOURCE_CHAR_LIMIT // 2]
+    tail = text[-CRITIC_SOURCE_CHAR_LIMIT // 3 :]
+    return f"{head}\n\n# ... source excerpt truncated ...\n\n{tail}"
 
 
 class ForgeState(TypedDict, total=False):
@@ -118,7 +145,7 @@ def retrieve_context_node(state: ForgeState) -> ForgeState:
 
 
 def draft_task_node(state: ForgeState) -> ForgeState:
-    client = MimoStructuredClient()
+    client = _get_client()
     summary = state["source_summary"]
     hits = state.get("retrieval_hits", [])
     triage = state["source_triage"]
@@ -134,7 +161,7 @@ def draft_task_node(state: ForgeState) -> ForgeState:
 
 
 def triage_source_node(state: ForgeState) -> ForgeState:
-    client = MimoStructuredClient()
+    client = _get_client()
     summary = state["source_summary"]
     hits = state.get("retrieval_hits", [])
     prompt = (
@@ -173,22 +200,31 @@ def harness_critic_node(state: ForgeState) -> ForgeState:
 
 
 def _critic_node(state: ForgeState, critic_name: str, system_prompt: str) -> ForgeState:
-    client = MimoStructuredClient()
+    client = _get_client()
     draft = state["draft_task"]
     summary = state["source_summary"]
+    source_excerpt = _read_source_excerpt(state["source_path"])
     prompt = (
         f"Source summary:\n{summary.model_dump_json(indent=2)}\n\n"
         f"Draft task:\n{draft.model_dump_json(indent=2)}\n\n"
+        f"Visible Python source (reference only — audit the spec first):\n"
+        f"```python\n{source_excerpt}\n```\n\n"
         f"You are the {critic_name} critic. Return one critic review JSON object."
     )
     review = client.invoke_model(CriticReview, system_prompt, prompt, label=f"critic:{critic_name}")
     if review.critic != critic_name:
+        logger.warning(
+            "critic_label_mismatch label=%s returned=%s overriding_to=%s",
+            critic_name,
+            review.critic,
+            critic_name,
+        )
         review = review.model_copy(update={"critic": critic_name})
     return {"critic_reviews": [review]}
 
 
 def synthesize_review_node(state: ForgeState) -> ForgeState:
-    client = MimoStructuredClient()
+    client = _get_client()
     draft = state["draft_task"]
     reviews = state.get("critic_reviews", [])
     prompt = (
@@ -226,7 +262,7 @@ def synthesize_review_no_critics_node(state: ForgeState) -> ForgeState:
 
 
 def curate_task_node(state: ForgeState) -> ForgeState:
-    client = MimoStructuredClient()
+    client = _get_client()
     draft = state["draft_task"]
     summary = state["source_summary"]
     consensus = state["consensus_review"]
@@ -335,22 +371,22 @@ def _ensure_artifact_dir(run_id: str) -> Path:
 
 
 def _render_summary(bundle: RunArtifact) -> str:
-    source = bundle.source_summaries[0]
-    curated = bundle.curated_tasks[0]
+    source = bundle.source_summaries[0] if bundle.source_summaries else None
+    curated = bundle.curated_tasks[0] if bundle.curated_tasks else None
     draft = bundle.draft_tasks[0] if bundle.draft_tasks else None
     consensus = bundle.consensus_reviews[0] if bundle.consensus_reviews else None
     return "\n".join(
         [
             f"# Task Forge Run {bundle.run_id}",
             "",
-            f"- Source: `{source.source_path}`",
+            f"- Source: `{source.source_path if source else 'unknown'}`",
             f"- Pipeline variant: {bundle.metadata.get('pipeline_variant', 'full_review')}",
             f"- Draft boundary: {draft.core_boundary if draft else 'skipped after triage reject'}",
-            f"- Curated boundary: {curated.core_boundary}",
+            f"- Curated boundary: {curated.core_boundary if curated else 'unknown'}",
             f"- Source triage: {bundle.source_triage.verdict if bundle.source_triage else 'unknown'}",
             f"- Final cohort: {bundle.anchor_assessment.final_bucket if bundle.anchor_assessment else 'unknown'}",
-            f"- Benchmark line: {curated.benchmark_line or 'unknown'}",
-            f"- Planning unit: {curated.planning_unit}",
+            f"- Benchmark line: {(curated.benchmark_line if curated else None) or 'unknown'}",
+            f"- Planning unit: {curated.planning_unit if curated else 'unknown'}",
             f"- Consensus verdict: {consensus.panel_verdict if consensus else 'skipped after triage reject'}",
             f"- LLM calls: {bundle.metadata.get('runtime', {}).get('llm_call_count', 'unknown')}",
             f"- Fast path taken: {bundle.metadata.get('runtime', {}).get('fast_path_taken', False)}",

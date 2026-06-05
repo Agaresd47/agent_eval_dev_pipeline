@@ -109,7 +109,12 @@ def ensure_within_repo(path: str | Path) -> Path:
 
 
 def load_dotenv(path: Path | None = None) -> None:
-    """Load a simple .env file into the current process if present."""
+    """Minimal in-process .env loader.
+
+    Kept hand-rolled on purpose to avoid pulling python-dotenv as a hard dependency
+    for what is essentially a single ``KEY=value`` loop. Uses ``setdefault`` so an
+    already-set process env wins over the file.
+    """
 
     env_path = path or (get_repo_root() / ".env")
     if not env_path.exists():

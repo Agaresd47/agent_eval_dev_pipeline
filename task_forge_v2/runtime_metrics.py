@@ -26,6 +26,8 @@ class RuntimeTelemetry:
     json_repair_call_count: int = 0
     retrieval_cache_hit_count: int = 0
     retrieval_cache_miss_count: int = 0
+    input_token_total: int = 0
+    output_token_total: int = 0
     fast_path_taken: bool = False
     model_names: list[str] = field(default_factory=list)
     call_records: list[dict[str, Any]] = field(default_factory=list)
@@ -37,9 +39,19 @@ class RuntimeTelemetry:
         finished = datetime.fromisoformat(self.finished_at)
         self.duration_sec = round((finished - started).total_seconds(), 3)
 
-    def record_text_call(self, *, label: str, model: str, duration_sec: float) -> None:
+    def record_text_call(
+        self,
+        *,
+        label: str,
+        model: str,
+        duration_sec: float,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+    ) -> None:
         self.llm_call_count += 1
         self.text_call_count += 1
+        self.input_token_total += max(0, int(input_tokens or 0))
+        self.output_token_total += max(0, int(output_tokens or 0))
         self._remember_model(model)
         self.call_records.append(
             {
@@ -47,6 +59,8 @@ class RuntimeTelemetry:
                 "label": label,
                 "model": model,
                 "duration_sec": round(duration_sec, 3),
+                "input_tokens": int(input_tokens or 0),
+                "output_tokens": int(output_tokens or 0),
             }
         )
 
@@ -87,6 +101,8 @@ class RuntimeTelemetry:
             "json_repair_call_count": self.json_repair_call_count,
             "retrieval_cache_hit_count": self.retrieval_cache_hit_count,
             "retrieval_cache_miss_count": self.retrieval_cache_miss_count,
+            "input_token_total": self.input_token_total,
+            "output_token_total": self.output_token_total,
             "fast_path_taken": self.fast_path_taken,
             "model_names": list(self.model_names),
             "call_records": list(self.call_records),

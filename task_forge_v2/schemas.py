@@ -295,17 +295,6 @@ class RunArtifact(BaseModel):
     artifacts: Dict[str, Any] = Field(default_factory=dict)
 
 
-SourceSummaryArtifact = SourceSummary
-RetrievalHitArtifact = RetrievalHit
-DraftTaskArtifact = DraftTask
-CriticReviewArtifact = CriticReview
-ConsensusReviewArtifact = ConsensusReview
-SourceTriageArtifact = SourceTriage
-AnchorAssessmentArtifact = AnchorAssessment
-CuratedTaskArtifact = CuratedTask
-RunArtifactBundle = RunArtifact
-
-
 __all__ = [
     "ArtifactBase",
     "SourceSummary",
@@ -317,15 +306,6 @@ __all__ = [
     "AnchorAssessment",
     "CuratedTask",
     "RunArtifact",
-    "SourceSummaryArtifact",
-    "RetrievalHitArtifact",
-    "DraftTaskArtifact",
-    "CriticReviewArtifact",
-    "ConsensusReviewArtifact",
-    "SourceTriageArtifact",
-    "AnchorAssessmentArtifact",
-    "CuratedTaskArtifact",
-    "RunArtifactBundle",
     "CriticLabel",
     "ReviewVerdict",
     "SuitabilityVerdict",

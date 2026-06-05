@@ -32,7 +32,13 @@ def test_synthesize_review_no_critics_builds_deterministic_consensus():
 def test_runtime_telemetry_tracks_calls_and_finishes():
     telemetry = start_runtime_telemetry("run_001", "no_critics")
     telemetry.record_structured_attempt(label="triage_source", schema_name="SourceTriage")
-    telemetry.record_text_call(label="triage_source", model="mimo-v2.5-pro", duration_sec=1.25)
+    telemetry.record_text_call(
+        label="triage_source",
+        model="mimo-v2.5-pro",
+        duration_sec=1.25,
+        input_tokens=120,
+        output_tokens=80,
+    )
     telemetry.record_json_repair(label="draft_task")
     telemetry.record_retrieval_cache(source="disk", hit=True)
     telemetry.fast_path_taken = True
@@ -48,6 +54,8 @@ def test_runtime_telemetry_tracks_calls_and_finishes():
     assert payload["structured_call_count"] == 1
     assert payload["json_repair_call_count"] == 1
     assert payload["retrieval_cache_hit_count"] == 1
+    assert payload["input_token_total"] == 120
+    assert payload["output_token_total"] == 80
     assert payload["fast_path_taken"] is True
 
 

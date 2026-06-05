@@ -16,6 +16,15 @@ Use these rules:
 """
 
 
+SOURCE_REFERENCE_NOTE = """\
+Source code policy:
+- Audit the spec (source summary + draft task) first.
+- Treat the visible Python source as reference only. Consult it when the spec is unclear or under-specified.
+- Never push the spec to restate, paraphrase, or absorb the source. The spec must stay readable without the source.
+- When citing source evidence, point at the specific gap in the spec, not at the source line itself.
+"""
+
+
 GENERATOR_SYSTEM = (
     REFERENCE_BENCHMARK_RULES
     + """\
@@ -55,6 +64,8 @@ Output requirements:
 
 BOUNDARY_CRITIC_SYSTEM = (
     REFERENCE_BENCHMARK_RULES
+    + "\n"
+    + SOURCE_REFERENCE_NOTE
     + """\
 
 You are the boundary critic.
@@ -72,6 +83,8 @@ Output requirements:
 
 LEAKAGE_CRITIC_SYSTEM = (
     REFERENCE_BENCHMARK_RULES
+    + "\n"
+    + SOURCE_REFERENCE_NOTE
     + """\
 
 You are the leakage critic.
@@ -88,6 +101,8 @@ Output requirements:
 
 SCOPE_CRITIC_SYSTEM = (
     REFERENCE_BENCHMARK_RULES
+    + "\n"
+    + SOURCE_REFERENCE_NOTE
     + """\
 
 You are the scope critic.
@@ -104,6 +119,8 @@ Output requirements:
 
 HARNESS_CRITIC_SYSTEM = (
     REFERENCE_BENCHMARK_RULES
+    + "\n"
+    + SOURCE_REFERENCE_NOTE
     + """\
 
 You are the harness critic.
@@ -174,6 +191,7 @@ ROLE_CONTRACTS = {
 
 __all__ = [
     "REFERENCE_BENCHMARK_RULES",
+    "SOURCE_REFERENCE_NOTE",
     "TRIAGE_SYSTEM",
     "GENERATOR_SYSTEM",
     "BOUNDARY_CRITIC_SYSTEM",

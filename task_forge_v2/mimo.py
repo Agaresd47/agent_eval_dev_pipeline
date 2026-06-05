@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Type, TypeVar
@@ -17,6 +18,7 @@ from .config import get_model_defaults, load_dotenv
 from .runtime_metrics import get_runtime_telemetry
 
 T = TypeVar("T", bound=BaseModel)
+_API_CALL_LOCK = threading.Lock()
 _LAST_API_CALL_AT: float | None = None
 
 
@@ -36,11 +38,7 @@ class MimoStructuredClient:
         self.model = model or defaults.chat_model
         self.temperature = temperature if temperature is not None else defaults.temperature
         self.max_completion_tokens = max_completion_tokens if max_completion_tokens is not None else defaults.max_output_tokens
-        api_key = (
-            os.getenv("TASK_FORGE_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-            or os.getenv("Xiaomi")
-        )
+        api_key = os.getenv("TASK_FORGE_API_KEY") or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("Missing API key. Set TASK_FORGE_API_KEY or OPENAI_API_KEY in .env.")
         llm_kwargs: dict[str, Any] = {
@@ -71,9 +69,16 @@ class MimoStructuredClient:
         started_at = time.perf_counter()
         response = chain.invoke({"user_prompt": user_prompt})
         elapsed = time.perf_counter() - started_at
+        input_tokens, output_tokens = _extract_usage_tokens(response)
         telemetry = get_runtime_telemetry()
         if telemetry is not None:
-            telemetry.record_text_call(label=label, model=self.model, duration_sec=elapsed)
+            telemetry.record_text_call(
+                label=label,
+                model=self.model,
+                duration_sec=elapsed,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
         text = getattr(response, "content", "") or ""
         if isinstance(text, list):
             parts = []
@@ -142,9 +147,22 @@ def _extract_json_object(text: str) -> Any:
 def _respect_api_spacing() -> None:
     global _LAST_API_CALL_AT
     min_gap_seconds = float(os.getenv("TASK_FORGE_MIN_API_SPACING_SEC", "0"))
-    now = time.monotonic()
-    if _LAST_API_CALL_AT is not None:
-        elapsed = now - _LAST_API_CALL_AT
-        if elapsed < min_gap_seconds:
-            time.sleep(min_gap_seconds - elapsed)
-    _LAST_API_CALL_AT = time.monotonic()
+    if min_gap_seconds <= 0:
+        return
+    with _API_CALL_LOCK:
+        now = time.monotonic()
+        if _LAST_API_CALL_AT is not None:
+            wait = min_gap_seconds - (now - _LAST_API_CALL_AT)
+            if wait > 0:
+                time.sleep(wait)
+        _LAST_API_CALL_AT = time.monotonic()
+
+
+def _extract_usage_tokens(response: Any) -> tuple[int, int]:
+    usage = getattr(response, "usage_metadata", None)
+    if not isinstance(usage, dict):
+        return 0, 0
+    return (
+        int(usage.get("input_tokens") or 0),
+        int(usage.get("output_tokens") or 0),
+    )
